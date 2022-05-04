@@ -27,7 +27,7 @@ app.post('/sign-up', async (req, res) => {
 
     try{
         await mongoClient.connect();
-        database = mongoClient.db(database);
+        db = mongoClient.db(database);
 
         await newUserSchema.validateAsync({ 
             name, 
@@ -36,7 +36,7 @@ app.post('/sign-up', async (req, res) => {
             passwordConfirmation 
         },{ abortEarly: false });
 
-        const existeUsuario = await database.collection('users').findOne( { email } );
+        const existeUsuario = await db.collection('users').findOne( { email } );
         if(existeUsuario){
             res.sendStatus(409);
             mongoClient.close();
@@ -45,9 +45,45 @@ app.post('/sign-up', async (req, res) => {
 
         const passwordHash = bcrypt.hashSync( password, 10);
 
-        await database.collection('users').insertOne( { name, email, password: passwordHash } )
+        await db.collection('users').insertOne( { name, email, password: passwordHash } )
 
         res.sendStatus(201);
+        mongoClient.close();
+    }catch(e){
+        res.status(422).send(e.details.map(detail => detail.message));
+        mongoClient.close();
+    }
+});
+
+//Sign-In
+app.post('/sign-in', async (req, res) => {
+    const { email, password } = req.body;
+    const schema = Joi.object({
+        email: Joi.string().trim().required(),
+        password: Joi.string().trim().required()
+    });    
+
+    try{
+        await mongoClient.connect();
+        db = mongoClient.db(database);
+
+        await schema.validateAsync({ email, password });
+
+        const existeUsuario = await db.collection('users').findOne({ email });
+        if(!existeUsuario){
+            res.sendStatus(404);
+            mongoClient.close();
+            return;
+        }
+
+        const validacao = bcrypt.compareSync(password, existeUsuario.password);
+        if(!validacao){
+            res.status(409).send('Não deu match');
+            mongoClient.close();
+            return;
+        }
+
+        res.send(existeUsuario);
         mongoClient.close();
     }catch(e){
         res.status(422).send(e.details.map(detail => detail.message));
