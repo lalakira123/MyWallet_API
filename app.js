@@ -89,6 +89,9 @@ app.get('/movements', async (req, res) => {
         delete user._id;
 
         const movements = await db.collection('movements').find( { userId: session.userId } ).toArray();
+        movements.forEach((movement) => {
+            delete movement.userId;
+        })
         
         res.send({...user, movements});
     } catch (error) {
@@ -100,28 +103,28 @@ app.post('/movements', async (req, res) => {
     const { movement, description, isPlus } = req.body;
     const { authorization } = req.headers;
 
+    console.log(req.body);
+
     const schema = Joi.object({
-        movement: Joi.number().trim().required(),
+        movement: Joi.number().required(),
         description: Joi.string().trim().required(),
         isPlus: Joi.boolean()
     })
+    const validation = schema.validate({ movement, description, isPlus });
+    if(validation.error) return res.sendStatus(422);
     
     try{
-        await schema.validateAsync({ movement, description, isPlus });
-
-        const token = authorization?.replace('Bearer').trim();
+        const token = authorization?.replace('Bearer', '').trim();
         if(!token) return res.sendStatus(401);
 
-        const session = db.colletion('sessions').findOne({ token });
+        const session = await db.collection('sessions').findOne({ token });
         if(!session) return res.sendStatus(401);
 
-        const user = db.colletion('users').findOne({ _id: session.userId })
-
-        await db.collection('movements').insertOne({ movement, description, isPlus, userId: user._id });
+        await db.collection('movements').insertOne({ movement, description, isPlus, userId: session.userId });
 
         res.sendStatus(201);
     }catch(e){
-        res.send(e.details.map( detail => detail.message) );
+        res.send('Não foi possível postar novo movimento')
     }
 }); 
 
