@@ -23,14 +23,15 @@ app.post('/sign-up', async (req, res) => {
         passwordConfirmation: Joi.string().required().valid(Joi.ref('password'))
     });
 
-    try{
-        await newUserSchema.validateAsync({ 
-            name, 
-            email, 
-            password, 
-            passwordConfirmation 
-        },{ abortEarly: false });
+    const validation = newUserSchema.validate({ 
+        name, 
+        email, 
+        password, 
+        passwordConfirmation 
+    });
+    if(validation.error) return res.sendStatus(422);
 
+    try {
         const existeUsuario = await db.collection('users').findOne( { email } );
         if(existeUsuario) return res.sendStatus(409);
 
@@ -38,15 +39,15 @@ app.post('/sign-up', async (req, res) => {
 
         await db.collection('users').insertOne( { name, email, password: passwordHash } )
 
-        res.sendStatus(201);
-    }catch(e){
-        res.status(422).send(e.details.map(detail => detail.message));
+        res.sendStatus(201);    
+    } catch (error) {
+       res.send(error); 
     }
 });
 
 //Sign-In
 app.post('/sign-in', async (req, res) => {
-    const { _id, email, password } = req.body;
+    const { email, password } = req.body;
     const schema = Joi.object({
         email: Joi.string().trim().required(),
         password: Joi.string().trim().required()
@@ -63,7 +64,7 @@ app.post('/sign-in', async (req, res) => {
 
         const token = v4();
 
-        await db.collection('sessions').insertOne({ token, userId:_id });
+        await db.collection('sessions').insertOne({ token, userId: existeUsuario._id });
 
         res.send(token);
     }catch(e){
@@ -73,7 +74,7 @@ app.post('/sign-in', async (req, res) => {
 
 //Movements
 app.get('/movements', async (req, res) => {
-    const { authorization } = req.header;
+    const { authorization } = req.headers;
 
     try {
         const token = authorization?.replace('Bearer', '').trim();
@@ -82,12 +83,12 @@ app.get('/movements', async (req, res) => {
         const session = await db.collection('sessions').findOne( {token} );
         if( !session ) return res.status(401).send('Usuário não existe');
 
-        const user = await db.colletion('users').findOne({ _id: session.userId });
+        const user = await db.collection('users').findOne({ _id: session.userId });
 
         delete user.password;
         delete user._id;
 
-        const movements = await db.collection('movements').find( { userId } ).toArray();
+        const movements = await db.collection('movements').find( { userId: session.userId } ).toArray();
         
         res.send({...user, movements});
     } catch (error) {
@@ -97,7 +98,7 @@ app.get('/movements', async (req, res) => {
 
 app.post('/movements', async (req, res) => {
     const { movement, description, isPlus } = req.body;
-    const { authorization } = req.header;
+    const { authorization } = req.headers;
 
     const schema = Joi.object({
         movement: Joi.number().trim().required(),
