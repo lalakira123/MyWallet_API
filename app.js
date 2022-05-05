@@ -1,19 +1,17 @@
 import express, { json } from 'express';
 import cors from 'cors';
-import { MongoClient, ObjectId } from 'mongodb';
 import dotenv from 'dotenv';
 import Joi from 'joi';
 import bcrypt from 'bcrypt';
+import { v4 } from 'uuid';
 
+import db from './db.js';
+
+//Express and Dependencies
 const app = express();
 app.use(cors());
 app.use(json());
 dotenv.config();
-
-//MongoDB
-let db;
-const mongoClient = new MongoClient(process.env.MONGO_URL);
-const database = process.env.BANCO_MONGO;
 
 //Sign-Up
 app.post('/sign-up', async (req, res) => {
@@ -26,9 +24,6 @@ app.post('/sign-up', async (req, res) => {
     });
 
     try{
-        await mongoClient.connect();
-        db = mongoClient.db(database);
-
         await newUserSchema.validateAsync({ 
             name, 
             email, 
@@ -37,59 +32,97 @@ app.post('/sign-up', async (req, res) => {
         },{ abortEarly: false });
 
         const existeUsuario = await db.collection('users').findOne( { email } );
-        if(existeUsuario){
-            res.sendStatus(409);
-            mongoClient.close();
-            return;
-        }
+        if(existeUsuario) return res.sendStatus(409);
 
         const passwordHash = bcrypt.hashSync( password, 10);
 
         await db.collection('users').insertOne( { name, email, password: passwordHash } )
 
         res.sendStatus(201);
-        mongoClient.close();
     }catch(e){
         res.status(422).send(e.details.map(detail => detail.message));
-        mongoClient.close();
     }
 });
 
 //Sign-In
 app.post('/sign-in', async (req, res) => {
-    const { email, password } = req.body;
+    const { _id, email, password } = req.body;
     const schema = Joi.object({
         email: Joi.string().trim().required(),
         password: Joi.string().trim().required()
     });    
 
     try{
-        await mongoClient.connect();
-        db = mongoClient.db(database);
-
         await schema.validateAsync({ email, password });
 
         const existeUsuario = await db.collection('users').findOne({ email });
-        if(!existeUsuario){
-            res.sendStatus(404);
-            mongoClient.close();
-            return;
-        }
+        if(!existeUsuario) return res.sendStatus(404);
 
         const validacao = bcrypt.compareSync(password, existeUsuario.password);
-        if(!validacao){
-            res.status(409).send('Não deu match');
-            mongoClient.close();
-            return;
-        }
+        if(!validacao) return res.status(401).send('Senha Inválida');
 
-        res.send(existeUsuario);
-        mongoClient.close();
+        const token = v4();
+
+        await db.collection('sessions').insertOne({ token, userId:_id });
+
+        res.send(token);
     }catch(e){
         res.status(422).send(e.details.map(detail => detail.message));
-        mongoClient.close();
     }
 });
+
+//Movements
+app.get('/movements', async (req, res) => {
+    const { authorization } = req.header;
+
+    try {
+        const token = authorization?.replace('Bearer', '').trim();
+        if(!token) return res.sendStatus(401);
+
+        const session = await db.collection('sessions').findOne( {token} );
+        if( !session ) return res.status(401).send('Usuário não existe');
+
+        const user = await db.colletion('users').findOne({ _id: session.userId });
+
+        delete user.password;
+        delete user._id;
+
+        const movements = await db.collection('movements').find( { userId } ).toArray();
+        
+        res.send({...user, movements});
+    } catch (error) {
+        console.log(error);
+    }
+});
+
+app.post('/movements', async (req, res) => {
+    const { movement, description, isPlus } = req.body;
+    const { authorization } = req.header;
+
+    const schema = Joi.object({
+        movement: Joi.number().trim().required(),
+        description: Joi.string().trim().required(),
+        isPlus: Joi.boolean()
+    })
+    
+    try{
+        await schema.validateAsync({ movement, description, isPlus });
+
+        const token = authorization?.replace('Bearer').trim();
+        if(!token) return res.sendStatus(401);
+
+        const session = db.colletion('sessions').findOne({ token });
+        if(!session) return res.sendStatus(401);
+
+        const user = db.colletion('users').findOne({ _id: session.userId })
+
+        await db.collection('movements').insertOne({ movement, description, isPlus, userId: user._id });
+
+        res.sendStatus(201);
+    }catch(e){
+        res.send(e.details.map( detail => detail.message) );
+    }
+}); 
 
 app.listen(process.env.PORTA, () => {
     console.log(`Server is running on ${process.env.PORTA}`)
