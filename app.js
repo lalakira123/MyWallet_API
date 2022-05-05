@@ -4,6 +4,7 @@ import dotenv from 'dotenv';
 import Joi from 'joi';
 import bcrypt from 'bcrypt';
 import { v4 } from 'uuid';
+import dayjs from 'dayjs';
 
 import db from './db.js';
 
@@ -93,6 +94,7 @@ app.get('/movements', async (req, res) => {
             delete movement.userId;
             delete movement._id;
         })
+        movements.reverse();
         
         res.send({...user, movements});
     } catch (error) {
@@ -119,7 +121,14 @@ app.post('/movements', async (req, res) => {
         const session = await db.collection('sessions').findOne({ token });
         if(!session) return res.sendStatus(401);
 
-        await db.collection('movements').insertOne({ movement, description, isPlus, userId: session.userId });
+        const date = dayjs().locale('pt-br').format('DD/MM');
+        await db.collection('movements').insertOne({ 
+            movement, 
+            description, 
+            isPlus,
+            date,
+            userId: session.userId 
+        });
 
         res.sendStatus(201);
     }catch(e){
