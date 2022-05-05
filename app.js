@@ -91,6 +91,7 @@ app.get('/movements', async (req, res) => {
         const movements = await db.collection('movements').find( { userId: session.userId } ).toArray();
         movements.forEach((movement) => {
             delete movement.userId;
+            delete movement._id;
         })
         
         res.send({...user, movements});
@@ -102,8 +103,6 @@ app.get('/movements', async (req, res) => {
 app.post('/movements', async (req, res) => {
     const { movement, description, isPlus } = req.body;
     const { authorization } = req.headers;
-
-    console.log(req.body);
 
     const schema = Joi.object({
         movement: Joi.number().required(),
