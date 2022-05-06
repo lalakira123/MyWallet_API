@@ -86,3 +86,35 @@ export async function deleteMovements (req, res) {
         res.sendStatus(422);
     }
 }
+
+export async function updateMovements(req, res) {
+    const { id } = req.params;
+    const { authorization } = req.headers;
+    const { movement, description } = req.body;
+
+    const schema = Joi.object({
+        movement: Joi.number().required(),
+        description: Joi.string().trim().required()
+    })
+    const validation = schema.validate({ movement, description });
+    if(validation.error) return res.sendStatus(422);
+
+    try {
+        const token = authorization?.replace('Bearer', '').trim();
+        if(!token) return res.sendStatus(401);
+
+        const session = await db.collection('sessions').findOne({ token });
+        if(!session) return res.sendStatus(401);
+
+        const existeTransacao = await db.collection('movements').findOne({ _id: new ObjectId(id) });
+        if(!existeTransacao) return res.sendStatus(404);
+
+        await db.collection('movements').updateOne({
+            _id: existeTransacao._id
+        }, { $set: { movement, description } });
+
+        res.sendStatus(200);
+    } catch (error) {
+        res.sendStatus(422);
+    }
+}
