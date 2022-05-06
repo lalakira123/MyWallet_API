@@ -1,5 +1,6 @@
 import Joi from 'joi';
 import dayjs from 'dayjs';
+import { ObjectId } from 'mongodb';
 
 import db from './../db.js';
 
@@ -21,7 +22,6 @@ export async function getMovements (req, res) {
         const movements = await db.collection('movements').find( { userId: session.userId } ).toArray();
         movements.forEach((movement) => {
             delete movement.userId;
-            delete movement._id;
         })
         movements.reverse();
         
@@ -62,5 +62,27 @@ export async function postMovements (req, res) {
         res.sendStatus(201);
     }catch(e){
         res.send('Não foi possível postar novo movimento')
+    }
+}
+
+export async function deleteMovements (req, res) {
+    const { id } = req.params;
+    const { authorization } = req.headers;
+
+    try {
+        const token = authorization?.replace('Bearer', '').trim();
+        if(!token) return res.sendStatus(401);
+
+        const session = await db.collection('sessions').findOne({ token });
+        if(!session) return res.sendStatus(401);
+
+        const existeTransacao = await db.collection('movements').findOne({ _id: new ObjectId(id) });
+        if(!session) return res.sendStatus(404);
+
+        await db.collection('movements').deleteOne({ _id: existeTransacao._id });
+
+        res.sendStatus(200);
+    } catch (error) {
+        res.sendStatus(422);
     }
 }
