@@ -15,6 +15,6 @@ dotenv.config();
 app.use(authRouter);
 app.use(movementRouter);
 
-app.listen(process.env.PORTA, () => {
-    console.log(`Server is running on ${process.env.PORTA}`)
+app.listen(process.env.PORT, () => {
+    console.log(`Server is running on ${process.env.PORT}`)
 });
