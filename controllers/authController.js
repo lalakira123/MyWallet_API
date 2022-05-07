@@ -1,25 +1,10 @@
-import Joi from 'joi';
 import bcrypt from 'bcrypt';
 import { v4 } from 'uuid';
 
 import db from './../db.js';
 
 export async function postUser(req, res) {
-    const { name, email, password, passwordConfirmation } = req.body;
-    const newUserSchema = Joi.object({
-        name: Joi.string().trim().required(),
-        email: Joi.string().trim().email().required(),
-        password: Joi.string().trim().required(),
-        passwordConfirmation: Joi.string().required().valid(Joi.ref('password'))
-    });
-
-    const validation = newUserSchema.validate({ 
-        name, 
-        email, 
-        password, 
-        passwordConfirmation 
-    });
-    if(validation.error) return res.sendStatus(422);
+    const { name, email, password } = req.body;
 
     try {
         const existeUsuario = await db.collection('users').findOne( { email } );
@@ -36,15 +21,9 @@ export async function postUser(req, res) {
 }
 
 export async function loginUser (req, res) {
-    const { email, password } = req.body;
-    const schema = Joi.object({
-        email: Joi.string().trim().required(),
-        password: Joi.string().trim().required()
-    });    
+    const { email, password } = req.body;    
 
     try{
-        await schema.validateAsync({ email, password });
-
         const existeUsuario = await db.collection('users').findOne({ email });
         if(!existeUsuario) return res.sendStatus(404);
 
@@ -57,6 +36,6 @@ export async function loginUser (req, res) {
 
         res.send(token);
     }catch(e){
-        res.status(422).send(e.details.map(detail => detail.message));
+        res.send(e);
     }
 }
